@@ -3,20 +3,70 @@ services:
     image: postgres:17-alpine
     container_name: task-manager-db
 
-    env_file:
-      - ./backend/.env
+    environment:
+      POSTGRES_USER: taskuser
+      POSTGRES_PASSWORD: taskpass
+      POSTGRES_DB: task_manager
 
     ports:
-      - "5433:5432"
+      - "5432:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U taskuser -d task_manager"
+        ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+    restart: unless-stopped
+
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: task-manager-api
+
+    environment:
+      PORT: 3001
+
+      DATABASE_URL: "postgresql://taskuser:taskpass@db:5432/task_manager?schema=public"
+
+    ports:
+      - "3001:3001"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:3001"
+
+    container_name: task-manager-web
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      - api
+
+    restart: unless-stopped
+
 
 volumes:
   postgres_data:
