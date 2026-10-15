@@ -58,6 +58,8 @@ Copy-Item backend/.env.example backend/.env
 docker compose up -d db
 ```
 
+Database trong Compose dùng cổng `5433` trên máy host để tránh xung đột với PostgreSQL cài sẵn ở cổng mặc định `5432`. API chạy trong Docker vẫn kết nối nội bộ qua `db:5432`.
+
 Trên Bash, dùng `cp backend/.env.example backend/.env` thay cho `Copy-Item`.
 
 Cài dependency, sinh Prisma Client, áp dụng migration, nạp dữ liệu mẫu và chạy API:
@@ -135,38 +137,7 @@ curl.exe -X DELETE http://localhost:3001/tasks/1
 
 ID hợp lệ nhưng không tồn tại trả `404`. Dữ liệu sai hoặc ID không đúng định dạng trả `400` với thông báo lỗi.
 
-## Các phần trong backend làm gì?
 
-- **Controller** (`backend/src/tasks/tasks.controller.ts`) nhận request HTTP và ánh xạ method/path vào thao tác tương ứng. Nó lấy dữ liệu từ body, query hoặc URL parameter, sau đó gọi service. Controller không trực tiếp viết truy vấn database.
-- **DTO** (`backend/src/tasks/dto/`) mô tả dữ liệu đầu vào. `ValidationPipe` trong `main.ts` kiểm tra DTO trước khi controller gọi service.
-- **Service** (`backend/src/tasks/tasks.service.ts`) điều phối các thao tác task. Service gọi các hàm truy cập dữ liệu trong `backend/src/tasks/api/` và chuyển kết quả về controller.
-- **PrismaService** (`backend/src/prisma/prisma.service.ts`) khởi tạo Prisma Client và kết nối PostgreSQL. Các hàm truy cập dữ liệu dùng Prisma Client để đọc hoặc ghi bảng `Task`.
-
-### Khi bấm “Thêm”, dữ liệu đi qua đâu?
-
-1. Người dùng nhập tiêu đề, mô tả, trạng thái và ngày hết hạn trong form `TaskModal`. Trình duyệt kiểm tra cơ bản như trường bắt buộc và giới hạn 100 ký tự để báo lỗi sớm.
-2. Khi gửi form, `TaskModal` gọi `handleSubmit` của trang `web/src/app/tasks/page.tsx`.
-3. Trang gọi `createTaskApi` ở frontend. Hàm này gửi `POST /tasks` với JSON tới URL `NEXT_PUBLIC_API_URL`.
-4. `TasksController.createTask()` nhận JSON qua `@Body()` thành `CreateTaskDto`.
-5. `ValidationPipe` kiểm tra dữ liệu: tiêu đề phải là chuỗi sau khi trim, không rỗng, tối đa 100 ký tự; trạng thái phải thuộc enum; ngày hết hạn phải hợp lệ. Nếu sai, NestJS trả `400` và không gọi thao tác ghi dữ liệu.
-6. Nếu hợp lệ, controller gọi `TasksService.createTask()`. Service chuyển DTO tới hàm tạo task, hàm này dùng Prisma Client để ghi vào PostgreSQL.
-7. Bản ghi được lưu trong bảng `Task`: PostgreSQL tự tăng `id` và đặt các giá trị mặc định của cột; Prisma tự cập nhật `updatedAt`. API trả task mới về web.
-8. Frontend tải lại danh sách bằng `GET /tasks`, cập nhật state React và hiển thị công việc vừa tạo.
-
-### Vì sao backend vẫn phải kiểm tra dữ liệu?
-
-Kiểm tra ở frontend giúp người dùng nhận phản hồi nhanh, nhưng không bảo vệ được API: request có thể được gửi trực tiếp bằng curl/Postman, gọi từ một giao diện khác hoặc bị sửa trong trình duyệt. Backend là nơi tiếp nhận dữ liệu trước khi ghi vào database, nên phải tự xác thực để mọi client đều theo cùng quy tắc và tránh lưu dữ liệu sai.
-
-## Kiểm tra dữ liệu còn sau khi restart
-
-Với Docker Compose, sau khi đã áp dụng migration và seed, tạo một task bằng API hoặc giao diện. Restart API rồi đọc lại danh sách:
-
-```powershell
-docker compose restart api
-curl.exe http://localhost:3001/tasks
-```
-
-Task vẫn còn vì dữ liệu được lưu trong PostgreSQL volume, không nằm trong bộ nhớ của tiến trình NestJS. `docker compose down` giữ volume; `docker compose down -v` xóa volume.
 
 ## Xem log và dừng hệ thống
 
